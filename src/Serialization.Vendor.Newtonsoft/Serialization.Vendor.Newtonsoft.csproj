@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+   <PropertyGroup>
+      <TargetFrameworks>netstandard2.0</TargetFrameworks>
+      <PackageId>ChacBolay.Serialization.Vendor.Newtonsoft</PackageId>
+      <Version>1.0.0</Version>
+      <CodeAnalysisRuleSet>..\..\ruleset.ruleset</CodeAnalysisRuleSet>
+      <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+      <NoWarn>NU1803;</NoWarn>
+   </PropertyGroup>
+
+   <PropertyGroup>
+      <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+   </PropertyGroup>
+
+   <ItemGroup>
+      <AdditionalFiles Include="../../stylecop.json" />
+      <PackageReference Include="ChacBolay.Component.Serialization" Version="0.0.0.1-local" />
+      <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+      <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
+         <PrivateAssets>all</PrivateAssets>
+         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+   </ItemGroup>
+
+</Project>
