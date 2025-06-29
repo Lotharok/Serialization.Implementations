@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
    <PropertyGroup>
-      <TargetFrameworks>netstandard2.0</TargetFrameworks>
       <PackageId>ChacBolay.Serialization.Vendor.Newtonsoft</PackageId>
+      <TargetFrameworks>netstandard2.0</TargetFrameworks>
       <Version>1.0.0</Version>
       <CodeAnalysisRuleSet>..\..\ruleset.ruleset</CodeAnalysisRuleSet>
       <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
