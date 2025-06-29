@@ -32,9 +32,9 @@
    </ItemGroup>
 
    <ItemGroup>
-      <ProjectReference Include="..\Serialization.Vendor.MessagePack\Serialization.Vendor.MessagePack.csproj" />
-      <ProjectReference Include="..\Serialization.Vendor.Newtonsoft\Serialization.Vendor.Newtonsoft.csproj" />
-      <ProjectReference Include="..\Serialization.Vendor.Protobuf\Serialization.Vendor.Protobuf.csproj" />
+     <ProjectReference Include="..\..\src\Serialization.Vendor.MessagePack\Serialization.Vendor.MessagePack.csproj" />
+     <ProjectReference Include="..\..\src\Serialization.Vendor.Newtonsoft\Serialization.Vendor.Newtonsoft.csproj" />
+     <ProjectReference Include="..\..\src\Serialization.Vendor.Protobuf\Serialization.Vendor.Protobuf.csproj" />
    </ItemGroup>
 
 </Project>
