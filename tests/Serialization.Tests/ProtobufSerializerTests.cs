@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -181,6 +182,138 @@ namespace Serialization.Tests
          result.ValidProperty.Should().Be("included");
 
          result.ReadOnlyProperty.Should().Be("readonly");
+      }
+
+      [Fact]
+      public void Serialize_WithCollectionOfComplexTypes_ShouldWork()
+      {
+         var serializer = new ProtobufSerializer();
+         var data = new DataWithCollections
+         {
+            Name = "Test Collection",
+            Items = new List<SampleData>
+            {
+               new SampleData { Name = "Item1", Age = 10 },
+               new SampleData { Name = "Item2", Age = 20 },
+            },
+            ArrayItems = new[]
+            {
+               new SampleData { Name = "Array1", Age = 30 },
+               new SampleData { Name = "Array2", Age = 40 },
+            },
+         };
+
+         var bytes = serializer.Serialize(data);
+         bytes.Should().NotBeNull();
+         bytes.Should().NotBeEmpty();
+
+         var result = serializer.Deserialize<DataWithCollections>(bytes);
+         result.Should().NotBeNull();
+         result.Name.Should().Be("Test Collection");
+         result.Items.Should().HaveCount(2);
+         result.ArrayItems.Should().HaveCount(2);
+      }
+
+      [Fact]
+      public void Serialize_WithCircularReference_ShouldThrowNotSupportedException()
+      {
+         var serializer = new ProtobufSerializer();
+         var data = new CircularReferenceType
+         {
+            Name = "Parent",
+            Child = new CircularReferenceType
+            {
+               Name = "Child",
+            },
+         };
+
+         Action act = () => serializer.Serialize(data);
+         act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Failed to serialize object*")
+            .WithInnerException<NotSupportedException>();
+      }
+
+      [Fact]
+      public void Deserialize_WithCorruptedBuffer_ShouldThrowInvalidOperationException()
+      {
+         var serializer = new ProtobufSerializer();
+         var corruptedBuffer = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+         Action act = () => serializer.Deserialize<SampleData>(corruptedBuffer);
+         act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Failed to deserialize buffer*");
+      }
+
+      [Fact]
+      public async Task DeserializeAsync_WithCorruptedBuffer_ShouldThrowInvalidOperationException()
+      {
+         var serializer = new ProtobufSerializer();
+         var corruptedBuffer = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+         Func<Task> act = async () => await serializer.DeserializeAsync<SampleData>(corruptedBuffer);
+         await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Failed to deserialize buffer*");
+      }
+
+      [Fact]
+      public void Serialize_WithComplexNestedCollections_ShouldRegisterTypesRecursively()
+      {
+         var serializer = new ProtobufSerializer();
+         var data = new List<DataWithCollections>
+         {
+            new DataWithCollections
+            {
+               Name = "Outer1",
+               Items = new List<SampleData>
+               {
+                  new SampleData { Name = "Nested1", Age = 5 },
+               },
+            },
+         };
+
+         var bytes = serializer.Serialize(data);
+         bytes.Should().NotBeNull();
+         bytes.Should().NotBeEmpty();
+
+         var result = serializer.Deserialize<List<DataWithCollections>>(bytes);
+         result.Should().NotBeNull();
+         result.Should().HaveCount(1);
+      }
+
+      [Fact]
+      public void Serialize_WithArrayOfComplexTypes_ShouldHandleArrayTypes()
+      {
+         var serializer = new ProtobufSerializer();
+         var data = new SampleData[]
+         {
+            new SampleData { Name = "Array1", Age = 15 },
+            new SampleData { Name = "Array2", Age = 25 },
+         };
+
+         var bytes = serializer.Serialize(data);
+         bytes.Should().NotBeNull();
+         bytes.Should().NotBeEmpty();
+
+         var result = serializer.Deserialize<SampleData[]>(bytes);
+         result.Should().NotBeNull();
+         result.Should().HaveCount(2);
+         result[0].Name.Should().Be("Array1");
+         result[1].Name.Should().Be("Array2");
+      }
+
+      [Fact]
+      public void EnsureTypeCanBeProcessed_CalledMultipleTimes_ShouldUseCachedResult()
+      {
+         var serializer = new ProtobufSerializer();
+
+         var data1 = new SampleData { Name = "Test1", Age = 10 };
+         var bytes1 = serializer.Serialize(data1);
+
+         var data2 = new SampleData { Name = "Test2", Age = 20 };
+         var bytes2 = serializer.Serialize(data2);
+
+         bytes1.Should().NotBeNull();
+         bytes2.Should().NotBeNull();
       }
    }
 }

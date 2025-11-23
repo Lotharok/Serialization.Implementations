@@ -1,5 +1,10 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Component.Serialization.Contract;
 
@@ -19,6 +24,15 @@ namespace Serialization.Vendor.Protobuf
    public class ProtobufSerializer : ISerializator<byte[]>
    {
       private readonly ProtoBuf.Meta.RuntimeTypeModel model;
+
+      // Cache to track which types we've already processed and avoid unnecessary locks
+      private readonly ConcurrentDictionary<Type, byte> processedTypes = new ConcurrentDictionary<Type, byte>();
+
+      // Lock to ensure RuntimeTypeModel registration is atomic
+      private readonly object registrationLock = new AccessViolationException();
+
+      // To detect circular references during recursive registration
+      private readonly ThreadLocal<HashSet<Type>> currentlyProcessing = new ThreadLocal<HashSet<Type>>(() => new HashSet<Type>());
 
       /// <summary>
       /// Initializes a new instance with the default runtime type model.
@@ -116,52 +130,90 @@ namespace Serialization.Vendor.Protobuf
 
          // Quick check: if type can already be serialized, we're done
          // Overhead: ~1-5 nanoseconds
-         if (this.model.CanSerialize(type))
+         if (this.processedTypes.ContainsKey(type) || this.model.CanSerialize(type))
          {
             return;
          }
 
          // Auto-register the type
-         this.RegisterTypeAutomatically(type);
-      }
-
-      /// <summary>
-      /// Automatically registers a type for protobuf serialization.
-      /// </summary>
-      /// <param name="type">Type to register.</param>
-      private void RegisterTypeAutomatically(Type type)
-      {
-         try
+         lock (this.registrationLock)
          {
-            // Register the type with automatic field detection
-            var metaType = this.model.Add(type, false);
-
-            // Add all public properties as fields with automatic numbering
-            var properties = type.GetProperties(System.Reflection.BindingFlags.Public |
-                                              System.Reflection.BindingFlags.Instance);
-
-            int fieldNumber = 1;
-            foreach (var property in properties)
+            if (this.processedTypes.ContainsKey(type) || this.model.CanSerialize(type))
             {
-               // Skip indexers
-               if (property.CanRead && property.CanWrite &&
-                   property.GetIndexParameters().Length == 0)
-               {
-                  metaType.Add(fieldNumber++, property.Name);
-               }
+               return;
             }
 
-            // Also add public fields
-            var fields = type.GetFields(System.Reflection.BindingFlags.Public |
-                                      System.Reflection.BindingFlags.Instance);
+            try
+            {
+               this.RegisterTypeRecursively(type);
+            }
+            finally
+            {
+               // Clear the tracking for this thread
+               this.currentlyProcessing.Value?.Clear();
+            }
+
+            // Mark as processed
+            this.processedTypes.TryAdd(type, 0);
+         }
+      }
+
+      private void RegisterTypeRecursively(Type type)
+      {
+         if (this.IsPrimitiveOrBasic(type) || this.model.CanSerialize(type))
+         {
+            return;
+         }
+
+         // Avoid infinite loops (A -> B -> A)
+         if (this.currentlyProcessing.Value.Contains(type))
+         {
+            return;
+         }
+
+         this.currentlyProcessing.Value.Add(type);
+
+         // Handle Collections (List<T>, Arrays, etc.)
+         if (this.IsCollectionType(type, out Type elementType))
+         {
+            if (elementType != null && !this.IsPrimitiveOrBasic(elementType))
+            {
+               this.RegisterTypeRecursively(elementType);
+            }
+
+            return; // Protobuf handles the collection if it knows the element
+         }
+
+         try
+         {
+            // Register the type in the model
+            var metaType = this.model.Add(type, applyDefaultBehaviour: false);
+
+            // 1. PROPERTIES: Sort alphabetically for DETERMINISM
+            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
+                .OrderBy(p => p.Name); // <--- CRITICAL: Sort by name
+
+            int fieldNumber = 1;
+
+            foreach (var property in properties)
+            {
+               // Recursively register the property type
+               this.RegisterTypeRecursively(property.PropertyType);
+
+               // Assign consistent sequential ID
+               metaType.Add(fieldNumber++, property.Name);
+            }
+
+            // 2. FIELDS: Sort alphabetically
+            var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance)
+                .Where(f => !f.IsInitOnly)
+                .OrderBy(f => f.Name); // <--- CRITICAL
 
             foreach (var field in fields)
             {
-               // Skip readonly fields
-               if (!field.IsInitOnly)
-               {
-                  metaType.Add(fieldNumber++, field.Name);
-               }
+               this.RegisterTypeRecursively(field.FieldType);
+               metaType.Add(fieldNumber++, field.Name);
             }
          }
          catch (Exception ex)
@@ -170,6 +222,40 @@ namespace Serialization.Vendor.Protobuf
                $"Type {type.Name} cannot be automatically registered for protobuf serialization. " +
                $"Consider using [ProtoContract] attributes or disable auto-registration. Error: {ex.Message}", ex);
          }
+         finally
+         {
+            this.currentlyProcessing.Value.Remove(type);
+         }
+      }
+
+      private bool IsCollectionType(Type type, out Type elementType)
+      {
+         elementType = null;
+         if (type.IsArray)
+         {
+            elementType = type.GetElementType();
+            return true;
+         }
+
+         if (type.IsGenericType && (
+             type.GetGenericTypeDefinition() == typeof(List<>) ||
+             type.GetGenericTypeDefinition() == typeof(IList<>) ||
+             type.GetGenericTypeDefinition() == typeof(IEnumerable<>) ||
+             type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))))
+         {
+            elementType = type.GetGenericArguments().FirstOrDefault();
+            return true;
+         }
+
+         return false;
+      }
+
+      private bool IsPrimitiveOrBasic(Type type)
+      {
+         return type.IsPrimitive || type.IsEnum ||
+                type == typeof(string) || type == typeof(DateTime) ||
+                type == typeof(TimeSpan) || type == typeof(Guid) ||
+                type == typeof(decimal) || type == typeof(byte[]);
       }
    }
 }
