@@ -95,11 +95,11 @@ namespace Serialization.Vendor.MessagePack
          // CompositeResolver permite usar múltiples resolvers en orden de prioridad
          // Primero intenta usar el resolver estándar (para tipos con atributos)
          // Si falla, usa el contractless resolver (para tipos sin atributos)
-         var resolver = CompositeResolver.Create(
-            StandardResolver.Instance,
-            ContractlessStandardResolver.Instance);
-
-         return MessagePackSerializerOptions.Standard.WithResolver(resolver);
+         return MessagePackSerializerOptions.Standard
+            .WithResolver(CompositeResolver.Create(
+               StandardResolver.Instance,
+               ContractlessStandardResolver.Instance))
+            .WithCompression(MessagePackCompression.Lz4BlockArray);
       }
    }
 }
