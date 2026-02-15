@@ -61,12 +61,15 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore -p:PackageVersion=${{ steps.version.outputs.version }}
+      - name: Build source projects
+        run: |
+          for proj in src/*/; do
+            dotnet build "$proj" --configuration Release --no-restore -p:PackageVersion=${{ steps.version.outputs.version }}
+          done
 
       - name: Test with coverage
         run: >
-          dotnet test --configuration Release --no-restore --no-build --framework net8.0
+          dotnet test --configuration Release --no-restore --framework net8.0
           /p:CollectCoverage=true
           /p:CoverletOutputFormat=cobertura
           /p:CoverletOutput=../../coverage/
@@ -77,12 +80,9 @@ jobs:
 
       - name: Generate coverage report
         if: always()
-        uses: danielpalme/ReportGenerator-GitHub-Action@5.5.1
-        with:
-          reports: coverage/*.xml
-          targetdir: coveragereport
-          reporttypes: 'HtmlInline;Cobertura;SummaryGithub'
-          tag: '${{ github.run_number }}_${{ github.run_id }}'
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool
+          reportgenerator -reports:coverage/*.xml -targetdir:coveragereport -reporttypes:"HtmlInline;Cobertura;SummaryGithub" -tag:"${{ github.run_number }}_${{ github.run_id }}"
 
       - name: Publish coverage summary
         if: always()
