@@ -66,7 +66,7 @@ jobs:
 
       - name: Test with coverage
         run: >
-          dotnet test --configuration Release --no-restore --no-build
+          dotnet test --configuration Release --no-restore --no-build --framework net8.0
           /p:CollectCoverage=true
           /p:CoverletOutputFormat=cobertura
           /p:CoverletOutput=../../coverage/
