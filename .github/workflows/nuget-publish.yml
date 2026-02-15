@@ -24,6 +24,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -70,23 +71,36 @@ jobs:
           /p:CoverletOutputFormat=cobertura
           /p:CoverletOutput=../../coverage/
           /p:ExcludeByAttribute="ExcludeFromCodeCoverage"
+          /p:Threshold=\"90,85\"
+          /p:ThresholdType=\"line,branch\"
+          /p:ThresholdStat=total
 
       - name: Generate coverage report
         if: always()
-        run: |
-          dotnet tool install --global dotnet-reportgenerator-globaltool
-          reportgenerator -reports:coverage/*.xml -targetdir:coverage/report -reporttypes:"HtmlSummary;TextSummary;Cobertura"
-          echo "### Code Coverage" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cat coverage/report/Summary.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.5.1
+        with:
+          reports: coverage/*.xml
+          targetdir: coveragereport
+          reporttypes: 'HtmlInline;Cobertura;SummaryGithub'
+          tag: '${{ github.run_number }}_${{ github.run_id }}'
+
+      - name: Publish coverage summary
+        if: always()
+        run: cat coveragereport/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Add coverage comment to PR
+        if: github.event_name == 'pull_request'
+        run: gh pr comment $PR_NUMBER --edit-last --create-if-none --body-file coveragereport/SummaryGithub.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.number }}
 
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage/report/
+          path: coveragereport/
 
       - name: Pack
         if: github.event_name != 'pull_request'
