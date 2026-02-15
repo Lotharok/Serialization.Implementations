@@ -82,7 +82,7 @@ jobs:
         if: always()
         run: |
           dotnet tool install -g dotnet-reportgenerator-globaltool
-          reportgenerator -reports:coverage/*.xml -targetdir:coveragereport -reporttypes:"HtmlInline;Cobertura;SummaryGithub" -tag:"${{ github.run_number }}_${{ github.run_id }}"
+          reportgenerator -reports:coverage/*.xml -targetdir:coveragereport -reporttypes:"HtmlInline;Cobertura;MarkdownSummaryGithub" -tag:"${{ github.run_number }}_${{ github.run_id }}"
 
       - name: Publish coverage summary
         if: always()
